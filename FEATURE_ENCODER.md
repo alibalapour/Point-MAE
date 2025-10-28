@@ -166,9 +166,18 @@ def extract_features_from_dataset(point_clouds, checkpoint_path=None):
 
 ## Requirements
 
+### Minimal Requirements (CPU mode)
 - PyTorch >= 1.7.0
-- knn_cuda (for KNN operations)
-- Other dependencies as listed in `requirements.txt`
+- timm >= 0.4.5
+
+The encoder will automatically use CPU fallback implementations for FPS (Farthest Point Sampling) and KNN operations when CUDA dependencies are not available. This is slower but allows the encoder to work on CPU-only systems.
+
+### Recommended (GPU mode)
+For optimal performance, install the CUDA dependencies:
+- knn_cuda (for efficient KNN operations)
+- pointnet2_ops (for efficient FPS operations)
+
+Other dependencies as listed in `requirements.txt`.
 
 ## Citation
 

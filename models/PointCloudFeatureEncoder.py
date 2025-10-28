@@ -16,12 +16,84 @@ try:
     HAS_CUDA_DEPS = True
 except:
     HAS_CUDA_DEPS = False
-    print_log("Warning: CUDA dependencies not available. KNN and FPS will use fallback implementations.", logger='PointCloudFeatureEncoder')
+    print_log("Warning: CUDA dependencies not available. Using CPU fallback implementations for FPS and KNN (slower).", logger='PointCloudFeatureEncoder')
 
 
 # ============================================================================
 # Core Components (copied from Point_MAE.py to avoid circular dependencies)
 # ============================================================================
+
+def fps_cpu(points, num_samples):
+    """
+    CPU implementation of Farthest Point Sampling.
+    
+    Args:
+        points: [B, N, 3] point cloud
+        num_samples: number of samples to select
+    
+    Returns:
+        sampled_points: [B, num_samples, 3]
+    """
+    B, N, _ = points.shape
+    device = points.device
+    
+    sampled_points = torch.zeros(B, num_samples, 3, device=device)
+    
+    for b in range(B):
+        pts = points[b]  # [N, 3]
+        
+        # Initialize with a random point
+        sampled_indices = [torch.randint(0, N, (1,)).item()]
+        distances = torch.full((N,), float('inf'), device=device)
+        
+        for i in range(num_samples):
+            if i > 0:
+                # Update distances to the nearest sampled point
+                last_sampled = pts[sampled_indices[-1]].unsqueeze(0)  # [1, 3]
+                new_distances = torch.norm(pts - last_sampled, dim=1)  # [N]
+                distances = torch.min(distances, new_distances)
+                
+                # Select the farthest point
+                farthest_idx = torch.argmax(distances).item()
+                sampled_indices.append(farthest_idx)
+            
+            sampled_points[b, i] = pts[sampled_indices[i]]
+    
+    return sampled_points
+
+
+def knn_cpu(points, queries, k):
+    """
+    CPU implementation of K-Nearest Neighbors.
+    
+    Args:
+        points: [B, N, 3] point cloud
+        queries: [B, M, 3] query points
+        k: number of nearest neighbors
+    
+    Returns:
+        indices: [B, M, k] indices of k nearest neighbors
+    """
+    B, N, _ = points.shape
+    _, M, _ = queries.shape
+    device = points.device
+    
+    indices = torch.zeros(B, M, k, dtype=torch.long, device=device)
+    
+    for b in range(B):
+        pts = points[b]  # [N, 3]
+        qrs = queries[b]  # [M, 3]
+        
+        # Compute pairwise distances
+        # [M, 1, 3] - [1, N, 3] -> [M, N, 3] -> [M, N]
+        distances = torch.norm(qrs.unsqueeze(1) - pts.unsqueeze(0), dim=2)
+        
+        # Find k nearest neighbors for each query
+        _, idx = torch.topk(distances, k, dim=1, largest=False, sorted=True)
+        indices[b] = idx
+    
+    return indices
+
 
 class Encoder(nn.Module):
     """Embedding module for point cloud groups"""
@@ -76,15 +148,19 @@ class Group(nn.Module):
             output: B G M 3
             center : B G 3
         '''
-        if not HAS_CUDA_DEPS:
-            raise RuntimeError("CUDA dependencies (knn_cuda, pointnet2_ops) required for Group.forward(). "
-                             "Please install them or use CPU-compatible alternatives.")
-        
         batch_size, num_points, _ = xyz.shape
-        # fps the centers out
-        center = misc.fps(xyz, self.num_group) # B G 3
-        # knn to get the neighborhood
-        _, idx = self.knn(xyz, center) # B G M
+        
+        # Use CUDA implementation if available, otherwise fallback to CPU
+        if HAS_CUDA_DEPS:
+            # fps the centers out
+            center = misc.fps(xyz, self.num_group) # B G 3
+            # knn to get the neighborhood
+            _, idx = self.knn(xyz, center) # B G M
+        else:
+            # CPU fallback implementations
+            center = fps_cpu(xyz, self.num_group)  # B G 3
+            idx = knn_cpu(xyz, center, self.group_size)  # B G M
+        
         assert idx.size(1) == self.num_group
         assert idx.size(2) == self.group_size
         idx_base = torch.arange(0, batch_size, device=xyz.device).view(-1, 1, 1) * num_points

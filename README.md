@@ -70,6 +70,8 @@ We use ShapeNet, ScanObjectNN, ModelNet40 and ShapeNetPart in this work. See [DA
 
 We provide a **Point Cloud Feature Encoder** that can be used as a standalone module to extract features from point clouds with pretrained weights. This encoder takes `B×N×3` point cloud input and produces `B×256` feature vectors.
 
+**Note**: The encoder works on both CPU and GPU. It automatically uses CPU fallback implementations when CUDA dependencies (knn_cuda, pointnet2_ops) are not available, though GPU mode is recommended for better performance.
+
 ### Quick Start
 
 ```python
