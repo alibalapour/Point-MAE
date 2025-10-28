@@ -66,6 +66,39 @@ pip install --upgrade https://github.com/unlimblue/KNN_CUDA/releases/download/0.
 
 We use ShapeNet, ScanObjectNN, ModelNet40 and ShapeNetPart in this work. See [DATASET.md](./DATASET.md) for details.
 
+## 2.1. Point Cloud Feature Encoder
+
+We provide a **Point Cloud Feature Encoder** that can be used as a standalone module to extract features from point clouds with pretrained weights. This encoder takes `B×N×3` point cloud input and produces `B×256` feature vectors.
+
+### Quick Start
+
+```python
+from models.PointCloudFeatureEncoder import PointCloudFeatureEncoder
+import torch
+
+# Create the encoder
+encoder = PointCloudFeatureEncoder(output_dim=256)
+
+# Load pretrained weights (optional)
+encoder.load_pretrained_weights('path/to/pretrain.pth')
+
+# Extract features from point cloud (B, N, 3)
+point_cloud = torch.randn(4, 1024, 3)
+features = encoder(point_cloud)  # Output: (4, 256)
+```
+
+### Running the Example
+
+```bash
+# Basic example without pretrained weights
+python examples/feature_encoder_example.py
+
+# With pretrained weights
+python examples/feature_encoder_example.py --ckpt path/to/pretrain.pth
+```
+
+For detailed documentation, see [FEATURE_ENCODER.md](./FEATURE_ENCODER.md).
+
 ## 3. Point-MAE Models
 |  Task | Dataset | Config | Acc.| Download|      
 |  ----- | ----- |-----|  -----| -----|
